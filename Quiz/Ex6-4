@@ -1,0 +1,19 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include<stdio.h>
+
+int main()
+{
+	// 1 ~ 100 까지 합 while문으로 작성
+	int i = 0;
+	int sum = 0;
+
+	while (i < 100) {
+		i++;
+		sum += i;
+	}
+
+	printf("%d\n", sum);
+
+
+	return 0;
+}
