@@ -1,0 +1,98 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include<stdio.h>
+
+int main()
+{
+	int a = 0;
+
+	printf("50이하의 정수를 입력 : \n");
+	scanf("%d", &a);
+
+	if (a > 50) {
+		printf("50이하의 정수를 입력해주세요!");
+		return 0;
+	}
+
+	// 1단계
+	for (int i = 0; i < a; i++)
+	{
+		for (int j = 0; j < i + 1; j++) {
+			printf("*");
+		}
+		printf("\n");
+	}
+
+	printf("\n--------------------------\n");
+
+	// 2단계
+	for (int i = 0; i < a; i++)
+	{
+		for (int j = a; j > i ; j--) {
+			printf("*");
+		}
+		printf("\n");
+	}
+
+	printf("\n--------------------------\n");
+
+	// 3단계
+	for (int i = 0; i < a; i++)
+	{
+		for (int j = a - 1; j > i ; j--) {
+			printf(" ");
+		}
+
+		for (int j = 0; j < i + 1; j++) {
+			printf("*");
+		}
+		printf("\n");
+
+	}
+
+	printf("\n--------------------------\n");
+
+	// 4단계
+	for (int i = 0; i < a; i++)
+	{
+		for (int j = 0; j < i; j++) {
+			printf(" ");
+		}
+
+		for (int j = a; j > i; j--) {
+			printf("*");
+		}
+
+
+		printf("\n");
+	}
+
+	printf("\n--------------------------\n");
+
+	// 5단계
+
+	for (int i = 1; i <= a; i++)
+	{
+		for (int j = i; j < a; j++)
+		{
+			printf(" ");
+		}
+		for (int k = 1; k <= i * 2 - 1; k++) {
+			printf("*");
+		}
+		printf("\n");
+	}
+
+	for (int i = a - 1; i >= 1; i--)
+	{
+		for (int j = a; j > i; j--)
+		{
+			printf(" ");
+		}
+		for (int k = 1; k <= i * 2 - 1; k++) {
+			printf("*");
+		}
+		printf("\n");
+	}
+
+	return 0;
+}
