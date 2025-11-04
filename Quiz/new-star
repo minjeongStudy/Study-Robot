@@ -1,0 +1,35 @@
+// 5단계
+
+// 가운데 줄을 그려주고 그 위와 아래를 각각 찍는게 중요하다.
+// 우선 가운데 줄
+int mid = ( a / 2 ) + 1;  // 만약에 5줄이 입력이 되면, 중간은 3번째 줄이다.
+
+for (int i = 1; i <= a; i++)
+{
+	int stars, space;	// stars는 별 , space는 빈 공간으로 본다.
+
+	if (i <= mid) {	// 5를 기준으로 3보다 작거나 같은 경우는 첫번째 줄부터 가운데 줄까지 
+		space	= mid - i;
+		stars	= ( 2 * i ) - 1;
+	}
+	else {			// 5를 기준으로 가운데부터 끝까지
+		space	= i - mid;
+		stars	= 2 * (a - i) + 1;
+	}
+
+	// 찍어내기
+	// 빈공간
+	for (int j = 0; j < space; j++)
+	{
+		printf(" ");
+	}
+	// 별
+	for (int j = 0; j < stars; j++)
+	{
+		printf("*");
+
+	}
+
+	printf("\n");
+}
+return 0;
