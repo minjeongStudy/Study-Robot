@@ -1,0 +1,28 @@
+#define _CRT_SECURE_NO_WARNINGS
+#include<stdio.h>
+
+void myPrint();
+int getNum();
+
+int main()
+{
+	int result;
+
+	result = getNum();
+	printf("반환값 : %d\n", result);
+
+	myPrint();
+	return 0;
+}
+
+void myPrint() {
+	printf("Hello World\n");
+}
+
+int getNum() {
+	int num;
+	printf("양수 입력 : ");
+	scanf("%d", &num);
+
+	return num;
+}
