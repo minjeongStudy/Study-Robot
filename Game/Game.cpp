@@ -115,7 +115,7 @@ void runProject() CV_NOEXCEPT {
     int score = 0;
 
     ImageObject obj;
-    obj.radius = 20;
+    obj.radius = 40;
     obj.position = getRandomPosition(width, height, obj.radius);
     obj.ballPoint = getRandomPoint();
 
