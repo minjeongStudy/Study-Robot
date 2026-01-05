@@ -130,6 +130,7 @@ void runProject() CV_NOEXCEPT {
     cv::VideoWriter outputVideo("output.avi", fourcc, 30, cv::Size(width, height));
 
     while (true) {
+
         cv::Mat frame, grayFrame, diff, thresh;
 
         cap >> frame;
