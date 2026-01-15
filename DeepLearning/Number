@@ -1,0 +1,460 @@
+import cv2 # openCV
+import numpy as np
+
+# tensorflow와 tf.keras를 임포트
+import tensorflow as tf
+from tensorflow import keras
+
+# 사운드
+import pygame as sound
+
+# 시간
+import time   # 시간 비교용
+
+# 초기화
+sound.mixer.init()
+input_sound = sound.mixer.Sound("input.wav")
+error_sound = sound.mixer.Sound("error.mp3")
+success_sound = sound.mixer.Sound("success.mp3")
+
+cap = cv2.VideoCapture(0)
+# 이전 프레임 저장
+ret, prev_frame = cap.read()
+if not cap.isOpened() :
+    print("웹캠을 열 수 없습니다.")
+    exit()
+
+prev_frame = cv2.flip(prev_frame, 1)
+prev_gray = cv2.cvtColor(prev_frame, cv2.COLOR_BGR2GRAY)
+
+# MNIST 데이터를 학습용, 테스트 데이터로 구분하여 읽어옴
+mnist = keras.datasets.mnist
+((train_images, train_labels), (test_images, test_labels)) = mnist.load_data()
+#
+(train_images, test_images) = (train_images / 255, test_images / 255)
+
+model = keras.Sequential([
+    keras.layers.Input(shape=(28, 28)),
+    keras.layers.Flatten(),
+    keras.layers.Dense(256, activation='relu'),
+    keras.layers.Dense(128, activation='relu'),
+    keras.layers.Dense(100, activation='relu'),
+    keras.layers.Dense(10, activation='softmax')
+])
+
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+
+model.fit(train_images, train_labels, epochs=10, verbose=1)
+
+model.save("my_first_DNN_model.keras")
+
+load_model = keras.models.load_model("my_first_DNN_model.keras")
+
+###
+# =========================
+# 패스워드
+# =========================
+password = '4890'
+input_password = ''
+input_password_one = ''
+###
+
+# ===================================
+# 텍스트 & 이미지 표시 제어 변수
+# ===================================
+show_space_text = False      # 텍스트 표시 여부
+space_text_start_time = 0    # 표시 시작 시간
+
+error_img = False            # 이미지 표시 여부
+error_img_start_time = 0     # 표시 시작 시간
+
+show_error_text = False      # 텍스트 표시 여부
+error_text_start_time = 0    # 표시 시작 시간
+
+# =========================
+# 표시할 이미지 불러오기
+# =========================
+emoji = cv2.imread("emoji.jpeg", cv2.IMREAD_UNCHANGED)
+emoji = cv2.resize(emoji, (200, 200))
+
+# =========================
+# 공
+# =========================
+ball_radius = 30        # 반지름
+ball_x = 600            # 공 중심 x
+ball_y = 40             # 공 중심 y
+ball_touched = False
+prev_ball_touched = False
+
+# =========================
+# error count
+# =========================
+error_count = 0
+
+# VideoWriter 설정
+fourcc = cv2.VideoWriter_fourcc(*'XVID')  # 코덱 (AVI)
+out = cv2.VideoWriter('output.avi', fourcc, 30.0, (640, 480))
+# 파일명, 코덱, FPS, 프레임 크기(width, height)
+
+while True:
+    ret, frame = cap.read()
+    if not ret : #만약에 읽어오지 못한다면
+        print("프레임을 가져올 수 없습니다.")
+        break
+    flip_frame = cv2.flip(frame, 1) # 축을 뒤집는다(거울 모드)
+
+    height, width, _ = frame.shape                                  # 네모를 불러올 프레임이 필요하다.
+    center_x, center_y = width // 2, height // 2                    # 센터를 찾을거다.
+    roi = flip_frame[center_y - 150 : center_y + 150,
+                     center_x - 150 : center_x + 150   ]            # 중앙으로부터 150씩 300 * 300
+    cv2.rectangle(flip_frame, (center_x - 150, center_y - 150),
+                  (center_x + 150, center_y + 150), (0, 0, 255, 2)) # 빨간 네모가 화면에 찍힐것임
+
+    gray = cv2.cvtColor(flip_frame, cv2.COLOR_BGR2GRAY)
+    gray_blur = cv2.GaussianBlur(gray, (5, 5), 0)
+
+    # =========================
+    # 모션 감지
+    # =========================
+    diff = cv2.absdiff(prev_gray, gray)
+    _, thresh = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
+
+    # 노이즈 제거
+    thresh = cv2.erode(thresh, None, iterations=2)  # 흰색 영역의 가장자리를 안쪽으로 줄임, 작은 점 제거
+    thresh = cv2.dilate(thresh, None, iterations=2) # 팽창 : erode를 하면서 깎인 객체를 다시 키움, 매직으로 덧칠하는 느낌
+
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)  #findContours : 윤곽선 찾기
+    # 왜 원본이 아니라 thresh인가. 이진 영상에서만 의미 있음. # RETR_EXTERNAL : 가장 바깥 운곽선만 # CHAIN_APPROX_SIMPLE : 윤곽선 점을 최소한으로 줄임
+
+    # =========================
+    # 공 터치 판정
+    # =========================
+    ball_touched = False
+
+    for cnt in contours:
+        # 너무 작은 움직임은 무시 (노이즈 제거)
+        if cv2.contourArea(cnt) < 800:      # contourArea -> 윤곽선이 감싸고 있는 영역의 면적(픽셀 수), 카메라 노이즈, 그림자 컨투어로 잡힘
+            continue
+
+        x, y, w, h = cv2.boundingRect(cnt)  # boundingRect -> 컨투어를 완전히 감싸는 가장 작은 직사각형
+
+        # 움직임 중심점
+        cx = x + w // 2
+        cy = y + h // 2
+
+        # 공 중심과 거리 계산
+        dist = np.sqrt((cx - ball_x)**2 + (cy - ball_y)**2)
+
+        # 움직임 객체의 중김점이 공 안에 들어왔는지
+        if dist <= ball_radius:
+            ball_touched = True
+            break
+
+    # =========================
+    # 공(원) 그리기
+    # =========================
+    cv2.circle(
+        flip_frame,
+        (ball_x, ball_y),
+        ball_radius,
+        (255, 0, 0),   # 파란색
+        -1             # 채우기
+    )
+
+    # =========================
+    # 텍스트 출력
+    # =========================
+    # 패스워드
+    cv2.putText(
+        flip_frame,
+        "PASSWORD : ",              # 표시할 텍스트
+        (10, 30),                   # 위치 (x, y)
+        cv2.FONT_HERSHEY_SIMPLEX,   # 폰트
+        0.8,                        # 글자 크기
+        (0, 255, 0),                # 글자 색
+        2                           # 두께
+    )
+
+    # 입력된 패스워드
+    cv2.putText(
+        flip_frame,
+        input_password,             # 입력 받을 패스워드
+        (170, 30),                  # 위치 (x, y)
+        cv2.FONT_HERSHEY_SIMPLEX,   # 폰트
+        0.8,                        # 글자 크기
+        (0, 255, 0),                # 글자 색
+        2                           # 두께
+    )
+
+    # 파란공 밑에 check 글자
+    cv2.putText(
+        flip_frame,
+        "check",                    # 표시할 텍스트
+        (570, 90),                  # 위치 (x, y)
+        cv2.FONT_HERSHEY_SIMPLEX,   # 폰트
+        0.6,                        # 글자 크기
+        (0, 255, 0),                # 글자 색
+        2                           # 두께
+    )
+
+    # 처음에는 없다가 패스워드를 한 번 이상 틀리면 나타남.
+    if error_count > 0 :
+        cv2.putText(
+            flip_frame,
+            "password error : " + str(error_count),     # 텍스트
+            (10, 60),                                   # 위치 (x, y)
+            cv2.FONT_HERSHEY_SIMPLEX,                   # 폰트
+            0.5,                                        # 글자 크기
+            (0, 0, 255),                                # 글자 색
+            1                                           # 두께
+        )
+
+    # ===================================
+    # 스페이스바 텍스트 1초 표시(화면 중앙에)
+    # ===================================
+    if show_space_text:
+        if time.time() - space_text_start_time < 1.0:
+            cv2.putText(
+                flip_frame,
+                input_password_one,                 # 텍스트
+                (center_x - 40, center_y + 40),     # 위치 (x, y)
+                cv2.FONT_HERSHEY_SIMPLEX,           # 폰트
+                5,                                  # 글자 크기
+                (255, 255, 0),                      # 글자 색
+                10                                  # 두께
+            )
+        else:
+            # 1초 지나면 자동 OFF
+            show_space_text = False
+
+    # =======================================================
+    # 패스워드 4자리 입력 시 에러 이미지 & 에러 텍스트 2초 표시
+    # =======================================================
+    if error_img :
+        if time.time() - error_img_start_time < 2.0:
+            cv2.putText(
+                flip_frame,
+                "FAIL",                          # 텍스트
+                (280, 70),                       # 위치 (x, y)
+                cv2.FONT_HERSHEY_SIMPLEX,        # 폰트
+                2,                               # 글자 크기
+                (0, 0, 255),                     # 글자 색
+                10                               # 두께
+            )
+
+            h, w, _ = emoji.shape
+            x, y = 220, 150
+            flip_frame[y:y+h, x:x+w] = emoji
+
+            cv2.putText(
+                flip_frame,
+                "If you enter the wrong password 5 times,",     # 텍스트
+                (100, 420),                                     # 위치 (x, y)
+                cv2.FONT_HERSHEY_SIMPLEX,                       # 폰트
+                0.7,                                            # 글자 크기
+                (0, 0, 255),                                    # 글자 색
+                2                                               # 두께
+            )
+
+            cv2.putText(
+                flip_frame,
+                "the window will close.",                   # 텍스트
+                (100, 450),                                 # 위치 (x, y)
+                cv2.FONT_HERSHEY_SIMPLEX,                   # 폰트
+                0.7,                                        # 글자 크기
+                (0, 0, 255),                                # 글자 색
+                2                                           # 두께
+            )
+        else:
+            error_img = False
+
+    # =======================================================
+    # 패스워드가 4자리가 아닐 때 오류 텍스트 2초 표시(화면 중앙에)
+    # =======================================================
+    if show_error_text:
+        if time.time() - error_text_start_time < 2.0:
+            cv2.putText(
+                flip_frame,
+                "Please Check Your Password",       # 텍스트
+                (185,250),                          # 위치 (x, y)
+                cv2.FONT_HERSHEY_SIMPLEX,           # 폰트
+                0.6,                                # 글자 크기
+                (0, 0, 255),                        # 글자 색
+                2                                   # 두께
+            )
+
+            cv2.putText(
+                flip_frame,
+                "If you enter the wrong password 5 times,",     # 텍스트
+                (185, 300),                                     # 위치 (x, y)
+                cv2.FONT_HERSHEY_SIMPLEX,                       # 폰트
+                0.5,                                            # 글자 크기
+                (0, 0, 255),                                    # 글자 색
+                1                                               # 두께
+            )
+
+            cv2.putText(
+                flip_frame,
+                "the window will close.",                   # 텍스트
+                (185, 320),                                 # 위치 (x, y)
+                cv2.FONT_HERSHEY_SIMPLEX,                   # 폰트
+                0.5,                                        # 글자 크기
+                (0, 0, 255),                                # 글자 색
+                1                                           # 두께
+            )
+        else:
+            # 1초 지나면 자동 OFF
+            show_error_text = False
+
+    # 프레임 저장
+    out.write(flip_frame)
+
+    cv2.imshow('frame', flip_frame)
+
+    # 화면 캡쳐를 위한 키 값 받기
+    key = cv2.waitKey(1) & 0xFF
+    if key == 32 :
+        # 받아온걸 저장(이진화를 위해서)
+        gray_image = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+        # 이미지를 반전 시켜줘야 한다.
+        gray_image = np.flip(gray_image, 1)
+        cv2.imwrite("gray_image.png", gray_image) # 저장
+        # 가우시안 노이즈 제거
+        gaussian_blur = cv2.GaussianBlur(gray_image, (5, 5), 3)
+        # 이진화 해줘야한다.
+        _, otsu_thread = cv2.threshold(gaussian_blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # 학습 시킬려면 캡처를 한 내용을 글자를 진하게 만들고 전처리를 해줘야한다.
+        ###### 전처리 ###### Morph
+        kernel = np.ones((5, 5), np.uint8)
+        erosion = cv2.erode(otsu_thread, kernel, iterations=5)
+        # iterations 반복할수록 글자가 두꺼워짐. 침식을 해야한다. 침식을 통한 확장. 지금 흰 배경에 검은 글자라서
+        cv2.imwrite("digit_binary_image.png", erosion) # 저장하기
+        # 이미지 자르기
+        img = cv2.imread("digit_binary_image.png", cv2.IMREAD_UNCHANGED)
+        #이미지 쉐입을 2개로 나눈다.
+        h, w = img.shape[:2]
+        crop_size = 280 # 300 * 300 에서 20정도 날릴거임
+        cx, cy = w //2, h // 2# 센터가 필요함
+        half = crop_size // 2
+        x1, x2 = cx - half, cx + half # x축1, x축2
+        y1, y2 = cy - half, cy + half # y축1, y축2
+        # 경계면 설정
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(w, x2)
+        y2 = min(h, y2)
+
+        cropped_img = img[y1:y2, x1:x2]
+
+        # 이미지 반전
+        reversed_img = cv2.bitwise_not(cropped_img)     # 크롭된 이미지를 반전
+        cv2.imwrite("IMAGE_FOR_TEST.png", reversed_img) # 최종 이미지
+
+        # 축소를 해야한다.
+        img_small = cv2.resize(reversed_img, (28, 28))
+        img_small = img_small // 255.0
+
+        predict_image = model.predict(img_small[np.newaxis, :, :]) # newaxis : 필요한 차원을 추가해서 shape을 맞추기 위함.
+
+        # ================================
+        # 스페이스바 눌렀을 때 텍스트 표시 시작
+        # ================================
+        show_space_text = True
+        space_text_start_time = time.time()
+
+        # 중앙에 입력 받은 숫자 찍기
+        input_password_one = ''
+        input_password_one = str(predict_image.argmax())
+        input_sound.play()
+
+        input_password = input_password + str(predict_image.argmax())
+
+        ## 1. 패스워드 4자리 입력되면 자동으로 검증
+        # if(len(input_password) == 4) :
+        #     if(input_password == password) :
+        #         print('잠금해제')
+        #         success = cv2.imread("success.jpg")
+        #         success_resized = cv2.resize(success, (flip_frame.shape[1], flip_frame.shape[0]))
+        #         flip_frame = success_resized
+        #
+        #         # 텍스트 출력
+        #         cv2.putText(
+        #             flip_frame,
+        #             "SUCCESS",                          # 텍스트
+        #             (280, 70),                          # 위치 (x, y)
+        #             # (center_x , center_y),            # 위치 (x, y)
+        #             cv2.FONT_HERSHEY_SIMPLEX,           # 폰트
+        #             2,                                  # 글자 크기
+        #             (0, 0, 255),                        # 글자 색 (초록)
+        #             10                                  # 두께
+        #         )
+        #
+        #         cv2.imshow("frame", flip_frame)
+        #         success_sound.play()
+        #         cv2.waitKey(0)
+        #         success_sound.stop()
+        #         break
+        #
+        #     else :
+        #         print('패스워드 다시 입력')
+        #         input_password = ''
+        #         error_count += 1
+        #         error_img = True
+        #         error_img_start_time = time.time()
+        #         error_sound.play()
+        #         if error_count >= 5:
+        #             break
+
+    # 2. 패스워드 입력 후 공을 터치 했을 때 검증
+    # 공을 터치했을 때
+    if ball_touched and not prev_ball_touched :
+        input_sound.play()
+        if(len(input_password) != 4) :          # 패스워드 길이가 4자리가 아니라면
+            ## 경고 메세지 1초 출력
+            show_error_text = True
+            error_text_start_time = time.time()
+            error_sound.play()
+            input_password = ''                 # 입력 받은 패스워드 문자열 초기화
+            error_count += 1                    # 에러 카운트 +1
+            if error_count >= 5:                # 5번 이상 오류 시 강제 종료
+                break
+        elif (len(input_password) == 4) :       # 패스워드 길이가 4자리라면
+            show_error_text = False
+            if(input_password == password) :    # 설정해둔 패스워드와 같다면
+                success = cv2.imread("success.jpg")
+                success_resized = cv2.resize(success, (flip_frame.shape[1], flip_frame.shape[0]))
+                flip_frame = success_resized
+                # 텍스트 출력
+                cv2.putText(
+                    flip_frame,
+                    "SUCCESS",                          # 텍스트
+                    (280, 70),                          # 위치 (x, y)
+                    cv2.FONT_HERSHEY_SIMPLEX,           # 폰트
+                    2,                                  # 글자 크기
+                    (0, 0, 255),                        # 글자 색
+                    10                                  # 두께
+                )
+
+                cv2.imshow("frame", flip_frame)
+                success_sound.play()
+                cv2.waitKey(0)
+                success_sound.stop()
+                break
+            else :
+                input_password = ''                     # 입력 받은 패스워드 문자열 초기화
+                error_count += 1                        # 에러 카운트 +1
+                ## 에러 이미지 & 메세지 2초 출력
+                error_img = True
+                error_img_start_time = time.time()
+                error_sound.play()
+                if error_count >= 5:                    # 5번 이상 오류 시 강제 종료
+                    break
+
+    prev_ball_touched = ball_touched
+
+    if key == 27 :
+        break
+
+cap.release()
+out.release()
+cv2.destroyAllWindows()
